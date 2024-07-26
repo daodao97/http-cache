@@ -66,6 +66,7 @@ type Client struct {
 	refreshKey         string
 	methods            []string
 	writeExpiresHeader bool
+	cacheableRequest   func(r *http.Request) bool
 }
 
 // ClientOption is used to set Client settings.
@@ -87,7 +88,13 @@ type Adapter interface {
 // Middleware is the HTTP cache middleware handler.
 func (c *Client) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if c.cacheableMethod(r.Method) {
+		cacheable := false
+		if c.cacheableRequest != nil {
+			cacheable = c.cacheableRequest(r)
+		} else {
+			cacheable = c.cacheableMethod(r.Method)
+		}
+		if cacheable {
 			sortURLParams(r.URL)
 			key := generateKey(r.URL.String())
 			if r.Method == http.MethodPost && r.Body != nil {
@@ -281,6 +288,13 @@ func ClientWithMethods(methods []string) ClientOption {
 			}
 		}
 		c.methods = methods
+		return nil
+	}
+}
+
+func ClientWithCacheableRequest(fn func(r *http.Request) bool) ClientOption {
+	return func(c *Client) error {
+		c.cacheableRequest = fn
 		return nil
 	}
 }
